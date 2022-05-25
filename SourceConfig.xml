@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<codegen>
+  <include-paths>
+    <folder path=".\src\jmCmdLine" />
+  </include-paths>
+  <folders>
+    <folder path=".\src\jmCmdLine" />
+  </folders>
+  <categories>
+    <category name="jmCmdLine" pattern="\jstd\" />
+    <category name="jmCmdLine" pattern="\CmdLine.h">
+      <except pattern="jmCmdLine.h" />
+      <except pattern="CPUWarmUp.h" />
+      <except pattern="StopWatch.h" />
+      <except pattern="benchmark.cpp" />
+    </category>
+  </categories>
+  <!-- encoding option maybe is: Default, Ascii, Unicode, UTF-7, UTF-8, UTF-32. -->
+  <!-- Default is "GBK" on Chinese version Windows. -->
+  <output path=".\src\jmCmdLine" encoding="Default">
+    <codepair category="jmCmdLine" filename="jmCmdLine" header-only="true" generate="true" />
+  </output>
+</codegen>
