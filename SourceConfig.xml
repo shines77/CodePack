@@ -4,15 +4,17 @@
     <folder path=".\src\jmCmdLine" />
   </include-paths>
   <folders>
-    <folder path=".\src\jmCmdLine" />
+    <folder path=".\src\jmCmdLine">
+      <except pattern="jmCmdLine.h" />
+      <except pattern="CPUWarmUp.h" />
+      <except pattern="StopWatch.h" />
+      <except pattern="benchmark.cpp" />
+    </folder>
   </folders>
   <categories>
     <category name="jmCmdLine" pattern="\jstd\" />
     <category name="jmCmdLine" pattern="\CmdLine.h">
       <except pattern="jmCmdLine.h" />
-      <except pattern="CPUWarmUp.h" />
-      <except pattern="StopWatch.h" />
-      <except pattern="benchmark.cpp" />
     </category>
   </categories>
   <!-- encoding option maybe is: Default, Ascii, Unicode, UTF-7, UTF-8, UTF-32. -->

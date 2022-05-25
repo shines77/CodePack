@@ -193,3 +193,6 @@ _ReSharper*/
 /Device-Coverage/
 /Device-Profile/
 /Device-Release/
+
+# Ignore the merged header file
+/src/jmCmdLine/jmCmdLine.h
