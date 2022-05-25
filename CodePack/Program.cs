@@ -159,9 +159,10 @@ namespace CodePack
         static int GetSourceFileIndex(string sourcefile, string[] sourcefiles)
         {
             int index = 0;
+            sourcefile = sourcefile.ToLower();
             foreach (var file in sourcefiles)
             {
-                if (file == sourcefile)
+                if (file.ToLower() == sourcefile)
                     return index;
                 index++;
             }
@@ -421,6 +422,11 @@ namespace CodePack
 
             // Transfer to global except file patterns
             gExceptFilePatterns = exceptFilePatterns;
+
+            //
+            // Converting Lookup<TKey, TElement> into other data structures c#
+            // See: https://stackoverflow.com/questions/11383384/converting-lookuptkey-telement-into-other-data-structures-c-sharp
+            //
             //gExceptFilePatterns = exceptFilePatterns.ToDictionary(group => group.Key, group => group.ToArray());
 
             // Collect the source files
