@@ -19,7 +19,7 @@
   </categories>
   <!-- encoding option maybe is: Default, Ascii, Unicode, UTF-7, UTF-8, UTF-32. -->
   <!-- Default is "GBK" on Chinese version Windows. -->
-  <output path=".\src\jmCmdLine" encoding="Default">
+  <output path=".\src\jmCmdLine" encoding="Default" with-bom="false">
     <codepair category="jmCmdLine" filename="jmCmdLine" header-only="true" generate="true" />
   </output>
 </codegen>

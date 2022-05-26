@@ -362,22 +362,40 @@ namespace CodePack
             CombineFiles(files, outputFilename, systemIncludes, encoding, externalIncludes);
         }
 
-        static Encoding TranslateEncoding(string outputEncoding)
+        static Encoding GenerateEncoding(string outputEncoding, bool withBOM)
         {
             Encoding encoding;
             outputEncoding = outputEncoding.ToLower();
-            if (outputEncoding == "utf-8")
-                encoding = Encoding.UTF8;
-            else if(outputEncoding == "utf-7")
-                encoding = Encoding.UTF7;
-            else if (outputEncoding == "utf-32")
-                encoding = Encoding.UTF32;
-            else if (outputEncoding == "unicode")
-                encoding = Encoding.Unicode;
-            else if (outputEncoding == "ascii")
-                encoding = Encoding.ASCII;
+            if (withBOM)
+            {
+                if (outputEncoding == "utf-8")
+                    encoding = Encoding.UTF8;
+                else if (outputEncoding == "utf-7")
+                    encoding = Encoding.UTF7;
+                else if (outputEncoding == "utf-32")
+                    encoding = Encoding.UTF32;
+                else if (outputEncoding == "unicode")
+                    encoding = Encoding.Unicode;
+                else if (outputEncoding == "ascii")
+                    encoding = Encoding.ASCII;
+                else
+                    encoding = Encoding.Default;
+            }
             else
-                encoding = Encoding.Default;
+            {
+                if (outputEncoding == "utf-8")
+                    encoding = new System.Text.UTF8Encoding(false);
+                else if (outputEncoding == "utf-7")
+                    encoding = new System.Text.UTF7Encoding(false);
+                else if (outputEncoding == "utf-32")
+                    encoding = new System.Text.UTF32Encoding(false, false);
+                else if (outputEncoding == "unicode")
+                    encoding = new System.Text.UnicodeEncoding(false, false);
+                else if (outputEncoding == "ascii")
+                    encoding = Encoding.ASCII;
+                else
+                    encoding = Encoding.Default;
+            }
             return encoding;
         }
 
@@ -457,7 +475,8 @@ namespace CodePack
             categorizedHeaderFiles = SortCategorizeSourceFiles(categorizedHeaderFiles);
 
             var outputFolder = Path.GetFullPath(folder + config.Root.Element("output").Attribute("path").Value);
-            var outputEncoding = TranslateEncoding(config.Root.Element("output").Attribute("encoding").Value);
+            var outputEncoding = GenerateEncoding(config.Root.Element("output").Attribute("encoding").Value,
+                                       bool.Parse(config.Root.Element("output").Attribute("with-bom").Value));
 
             var categorizedOutput = config.Root
                 .Element("output")

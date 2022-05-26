@@ -202,9 +202,65 @@ foreach (var line in File.ReadAllLines(codeFile))
 
 大致明白了吧，他使用的是这种以 "../" 相对路径做为头文件的路径声明的方式。这种写法一般只会出现在 `C++` 新手阶段，或者虽然写了很久 `C++`，但并没有太多跨平台经验的人身上，或者一意孤行的偏执者。相信阅读过各大知名开源库的程序员，比如：`linux`，`boost`，`clang`，`llvm` 等，都不会这么写。这种用法，在你的项目里也许够用，能用，但是并不专业。一旦，作为别人项目里的依赖库，很容易导致头文件引用路径问题而凉凉。
 
-相信熟悉 `gcc` 的朋友都知道 `gcc` 的编译选项里 `-I XXXX(路径)` 是什么意思吧。对，这就是包含路径 (`include path`)，`MSVC` 的设置里叫 “附加包含目录” 。
+相信熟悉 `gcc` 的朋友都知道 `gcc` 的编译选项里 `-I XXXX(路径)` 是什么意思吧。对，这就是包含路径 (`include path`)，`MSVC` 的设置里叫 “附加包含目录”，在 CMake 里叫 `include_directories` 。你也可以看到，在 `vczh` 的开源项目里，也没有一个是有用 `CMakeList.txt` 的，可想而知。
 
-另外，还发现以下问题：
+关于包含路径 (`include path`) 这里就不再敖述了。
+
+## 4. 改进
+
+所以，我们要在配置文件里加一个包含路径的设置，如下所示：
+
+```xml
+<?xml version="1.0" encoding="utf-8" ?>
+<codegen>
+  <include-paths>
+    <folder path=".\src\jmCmdLine" />
+  </include-paths>
+  <folders>
+    <folder path=".\src\jmCmdLine" />
+  </folders>
+  <categories>
+    <category name="jmCmdLine" pattern="\jstd\" />
+    <category name="jmCmdLine" pattern="\CmdLine.h">
+      <except pattern="jmCmdLine.h" />
+    </category>
+  </categories>
+  <output path=".\src\jmCmdLine">
+    <codepair category="jmCmdLine" filename="jmCmdLine" generate="true" />
+  </output>
+</codegen>
+```
+
+除了包含路径的问题以外，还发现了以下几个问题：
 
 1. `category` 内的头文件合并时的先后顺序不对；
-2. 222
+
+2. 合并的文件会同时生成 `*.h` 和 `*.cpp`，但有时候我们只想生成 `*.h` 文件；
+
+3. 合并后的输出文件的编码格式是 `UTF-8 + BOM`，加了 `BOM` 文件标志头以后在 Linux 下的 gcc 处理有问题。
+
+为了解决这几个问题，我们又增加了一些设置，配置文件变为：
+
+```xml
+<?xml version="1.0" encoding="utf-8" ?>
+<codegen>
+  <include-paths>
+    <folder path=".\src\jmCmdLine" />
+  </include-paths>
+  <folders>
+    <folder path=".\src\jmCmdLine" />
+  </folders>
+  <categories>
+    <category name="jmCmdLine" pattern="\jstd\" />
+    <category name="jmCmdLine" pattern="\CmdLine.h">
+      <except pattern="jmCmdLine.h" />
+    </category>
+  </categories>
+  <!-- encoding option maybe is: Default, Ascii, Unicode, UTF-7, UTF-8, UTF-32. -->
+  <!-- Default is "GBK" on Chinese version Windows. -->
+  <output path=".\src\jmCmdLine" encoding="Default" with-bom="false">
+    <codepair category="jmCmdLine" filename="jmCmdLine" header-only="true" generate="true" />
+  </output>
+</codegen>
+```
+
