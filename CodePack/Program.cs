@@ -169,6 +169,25 @@ namespace CodePack
             return -1;
         }
 
+        static int GetSourceFileIndex(string sourcefile, LinkedList<string> sourcefiles,
+                                      out LinkedListNode<string> out_node)
+        {
+            int index = 0;
+            sourcefile = sourcefile.ToLower();
+            LinkedListNode<string> node;
+            for (node = sourcefiles.First; node != null; node = node.Next)
+            {
+                if (node.Value.ToLower() == sourcefile)
+                {
+                    out_node = node;
+                    return index;
+                }
+                index++;
+            }
+            out_node = node;
+            return -1;
+        }
+
         // Sort the categorize source files
         static Dictionary<string, string[]> SortCategorizeSourceFiles(Dictionary<string, string[]> categorizedFiles)
         {
@@ -205,33 +224,74 @@ namespace CodePack
                     }
                 }
 
-                string[] copyOrderedFiles = new string[orderedFiles.Count()];
-                for (int i = 0; i < orderedFiles.Count(); i++)
+                if (true)
                 {
-                    copyOrderedFiles[i] = orderedFiles[i];
-                }
-
-                // Sort the categorize source file by dependecies order [asc order]
-                foreach (var sourceFile in copyOrderedFiles)
-                {
-                    string[] includeFiles = null;
-                    if (ScannedFiles.TryGetValue(sourceFile, out includeFiles))
+                    // Sort the categorize source file by dependecies order [asc order]
+                    LinkedList<string> orderedFileList = new LinkedList<string>();
+                    foreach (var sourceFile in orderedFiles)
                     {
-                        int sourceOrder = GetSourceFileIndex(sourceFile, orderedFiles);
-                        foreach (var includeFile in includeFiles)
-                        {
-                            int includeOrder = GetSourceFileIndex(includeFile, orderedFiles);
-                            if (includeOrder > sourceOrder)
-                            {
-                                string tmp = orderedFiles[includeOrder];
-                                orderedFiles[includeOrder] = orderedFiles[sourceOrder];
-                                orderedFiles[sourceOrder] = tmp;
+                        orderedFileList.AddLast(sourceFile);
+                    }
 
-                                sourceOrder = includeOrder;
-                            }
-                            else if (includeOrder == sourceOrder)
+                    foreach (var sourceFile in orderedFiles)
+                    {
+                        string[] includeFiles = null;
+                        if (ScannedFiles.TryGetValue(sourceFile, out includeFiles))
+                        {
+                            LinkedListNode<string> sourceNode = null;
+                            int sourceOrder = GetSourceFileIndex(sourceFile, orderedFileList, out sourceNode);
+                            if (sourceOrder == -1) continue;
+                            foreach (var includeFile in includeFiles)
                             {
-                                throw new ArgumentException();
+                                LinkedListNode<string> includeNode = null;
+                                int includeOrder = GetSourceFileIndex(includeFile, orderedFileList, out includeNode);
+                                if (includeOrder == -1) continue;
+                                if (includeOrder > sourceOrder)
+                                {
+                                    orderedFileList.Remove(sourceNode);
+                                    orderedFileList.AddAfter(includeNode, sourceNode);
+
+                                    sourceOrder = includeOrder;
+                                }
+                                else if (includeOrder == sourceOrder)
+                                {
+                                    throw new ArgumentException();
+                                }
+                            }
+                        }
+                    }
+
+                    orderedFiles = orderedFileList.ToArray();
+                }
+                else
+                {
+                    string[] fixedOrderedFiles = new string[orderedFiles.Count()];
+                    Array.Copy(orderedFiles, fixedOrderedFiles, orderedFiles.Count());
+
+                    // Sort the categorize source file by dependecies order [asc order]
+                    foreach (var sourceFile in fixedOrderedFiles)
+                    {
+                        string[] includeFiles = null;
+                        if (ScannedFiles.TryGetValue(sourceFile, out includeFiles))
+                        {
+                            int sourceOrder = GetSourceFileIndex(sourceFile, orderedFiles);
+                            if (sourceOrder == -1) continue;
+                            foreach (var includeFile in includeFiles)
+                            {
+                                int includeOrder = GetSourceFileIndex(includeFile, orderedFiles);
+                                if (includeOrder == -1) continue;
+                                if (includeOrder > sourceOrder)
+                                {
+                                    string tmp = orderedFiles[includeOrder];
+                                    orderedFiles[includeOrder] = orderedFiles[sourceOrder];
+                                    orderedFiles[sourceOrder] = tmp;
+
+                                    sourceOrder = includeOrder;
+                                }
+                                else if (includeOrder == sourceOrder)
+                                {
+                                    throw new ArgumentException();
+                                }
                             }
                         }
                     }

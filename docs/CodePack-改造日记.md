@@ -127,7 +127,7 @@ using namespace vl::stream;
 经过调试，发现一个很严重的问题。例如，在扫描源代码的具体内容时，当扫描到非系统头文件的引用时，例如：
 
 ```cpp
-// 在 .\src\jmCmdLine\jstd\Variant.h 文件中
+/* .\src\jmCmdLine\jstd\Variant.h 文件 */
 
 #include "jstd/char_traits.h"
 #include "jstd/apply_visitor.h"
@@ -204,7 +204,7 @@ foreach (var line in File.ReadAllLines(codeFile))
 
 相信熟悉 `gcc` 的朋友都知道 `gcc` 的编译选项里 `-I XXXX(路径)` 是什么意思吧。对，这就是包含路径 (`include path`)，`MSVC` 的设置里叫 “附加包含目录”，在 CMake 里叫 `include_directories` 。你也可以看到，在 `vczh` 的开源项目里，也没有一个是有用 `CMakeList.txt` 的，可想而知。
 
-关于包含路径 (`include path`) 这里就不再敖述了。
+关于为什么要设置包含路径 (`include path`) 的原因，这里就不敖述了。
 
 ## 4. 改进
 
@@ -233,11 +233,11 @@ foreach (var line in File.ReadAllLines(codeFile))
 
 除了包含路径的问题以外，还发现了以下几个问题：
 
-1. `category` 内的头文件合并时的先后顺序不对；
+1. `category` 内的文件合并时头文件的先后顺序是不对的；
 
-2. 合并的文件会同时生成 `*.h` 和 `*.cpp`，但有时候我们只想生成 `*.h` 文件；
+2. 合并文件时会同时生成 `*.h` 和 `*.cpp`，但有时候我们只想生成 `*.h` 文件；
 
-3. 合并后的输出文件的编码格式是 `UTF-8 + BOM`，加了 `BOM` 文件标志头以后在 Linux 下的 gcc 处理有问题。
+3. 合并后的输出文件的编码格式默认是 `UTF-8 + BOM`，加了 `BOM` 文件标志头以后在 Linux 下的 gcc 处理可能有问题。
 
 为了解决这几个问题，我们又增加了一些设置，配置文件变为：
 
@@ -264,3 +264,170 @@ foreach (var line in File.ReadAllLines(codeFile))
 </codegen>
 ```
 
+### 4.1 包含路径的处理
+
+包含路径可以包含一个或多个路径，搜索是有顺序的，所以如果有多个路径，要注意路径的先后顺序。
+
+```C#
+static string[] gIncludePaths = null;
+
+// 从配置文件读取 include-paths 列表，保存到全局变量中
+gIncludePaths = config.Root
+    .Element("include-paths")
+    .Elements("folder")
+    .Select(e => Path.GetFullPath(folder + e.Attribute("path").Value))
+    .ToArray();
+
+// 搜索匹配的 includeFile
+static string FindIncludeFile(string sourceFile, string includeFile)
+{
+    // 从全局 include-paths 列表中搜索匹配的 includeFile
+    foreach (var includePath in gIncludePaths)
+    {
+        string fullIncludeFile = Path.GetFullPath(includePath + @"\" + includeFile);
+        if (File.Exists(fullIncludeFile))
+        {
+            return fullIncludeFile;
+        }
+    }
+
+    // 如果 include-paths 列表中没找到，则以 sourceFile 所在的目录为基准，以相对路径搜索 includeFile
+    string localIncludeFile = Path.GetFullPath(Path.GetDirectoryName(sourceFile) + @"\" + includeFile);
+    if (File.Exists(localIncludeFile))
+        return localIncludeFile;
+    else
+        return null;
+}
+```
+
+搜索源文件 `sourceFile` 中声明的 `#include "XXXXXX.h"` 的头文件的真实路径 `fullIncludeFile`，如果 `fullIncludeFile` 文件不存在，则显示错误信息。
+
+```C#
+// 规则表达式：#include "XXXXXX.h"
+static Regex IncludeRegex = new Regex(@"^\s*\#include\s*""(?<path>[^""]+)""\s*$");
+
+......
+
+foreach (var line in File.ReadAllLines(sourceFile))
+{
+    Match match = IncludeRegex.Match(line);
+    if (match.Success)
+    {
+        string includeFile = match.Groups["path"].Value;
+        // 搜索源文件 sourceFile 中声明的 #include "XXXXXX.h" 的头文件的真实路径
+        string fullIncludeFile = FindIncludeFile(sourceFile, includeFile);
+        // 如果 fullIncludeFile 文件不存在，则显示错误信息
+        if (fullIncludeFile != null && fullIncludeFile != "")
+        {
+            if (!directIncludeFiles.Contains(fullIncludeFile))
+            {
+                directIncludeFiles.Add(fullIncludeFile);
+            }
+        }
+        else
+        {
+            Console.WriteLine("Error: Header file not found.");
+            Console.WriteLine("Source File: '{0}', Included File: '{1}'",
+                              sourceFile, includeFile);
+            Console.WriteLine("");
+        }
+    }
+}
+```
+
+### 4.2 `category` 内的头文件先后顺序
+
+在 `C++` 的头文件里，类、Enum、Union、常量、变量和函数的声明和使用都是有先后顺序的，你必须先声明才能使用。所以头文件相互间也是有依赖顺序的，尤其是 `Header Only` 的头文件里更加明显。
+
+对于一个类的引用，可以不 `#include` 它的头文件，但是必须写前置声明（Forward declaration），且头文件里只能使用这个类的指针或引用，不能使用类的实体，这就是 `pimpl` 模式 ([Pointer to implementation](https://zhuanlan.zhihu.com/p/458947637)) 。简单的说，就是在头文件里使用 `pimpl` 指针，在 `cpp` 文件里使用 `pimpl` 指针访问这个类的接口。
+
+但是，这只适合于同时有 `*.h` 和 `*.cpp` 文件的模式，对于只有 `*.h` 文件的 `Header Only` 模式，是不能打乱头文件的顺序的。
+
+例如，下面的例子：
+
+`/jstd/Variant.h` 引用了下面两个头文件。
+
+```cpp
+/* /jstd/Variant.h 文件 */
+
+#include "jstd/char_traits.h"
+#include "jstd/apply_visitor.h"
+```
+
+那么，在合并的时候，`"jstd/char_traits.h"` 文件和 `"jstd/apply_visitor.h"` 文件就必须出现在 `"jstd/Variant.h"` 文件的前面。
+
+具体的解决办法：
+
+我们在 GetIncludedFiles() 函数里扫描的时候，顺便在 `ScannedFiles` 字典里记录了每一个头文件的源码里，所声明包含的所有非系统头文件的文件列表，这个包含的文件列表是经过递归搜索出来的，所以会反应每一个头文件的相互包含（依赖）关系。
+
+在 SortCategorizeSourceFiles() 函数里：
+
+先取得每一个 `category` 里所有的头文件源码里包含其他非系统头文件的文件个数，并对其做升序的排序（从小到大），这样没有依赖任何其他（非系统）头文件的头文件将会排在文件列表 `string[]` 的前面，这样有助于减少之后排序时的 swap() 次数。
+
+采用类似冒泡排序的原理，遍历每个 `category` 分类里的所有头文件，
+
+```C#
+// 在 GetIncludedFiles() 函数里扫描的时候，所记录下来的每一个头文件，所对应的 #inlcude 非系统头文件的文件列表
+static Dictionary<string, string[]> ScannedFiles = new Dictionary<string, string[]>();
+
+......
+
+static int GetSourceFileIndex(string sourcefile, string[] sourcefiles)
+{
+    int index = 0;
+    sourcefile = sourcefile.ToLower();
+    foreach (var file in sourcefiles)
+    {
+        if (file.ToLower() == sourcefile)
+            return index;
+        index++;
+    }
+    return -1;
+}
+
+static Dictionary<string, string[]> SortCategorizeSourceFiles(Dictionary<string, string[]> categorizedFiles) {
+
+  ......
+
+  // Sort the categorize source file by dependecies order [asc order]
+  LinkedList<string> orderedFileList = new LinkedList<string>();
+  foreach (var sourceFile in orderedFiles)
+  {
+      orderedFileList.AddLast(sourceFile);
+  }
+
+  foreach (var sourceFile in orderedFiles)
+  {
+      string[] includeFiles = null;
+      if (ScannedFiles.TryGetValue(sourceFile, out includeFiles))
+      {
+          LinkedListNode<string> sourceNode = null;
+          int sourceOrder = GetSourceFileIndex(sourceFile, orderedFileList, out sourceNode);
+          if (sourceOrder == -1) continue;
+          foreach (var includeFile in includeFiles)
+          {
+              LinkedListNode<string> includeNode = null;
+              int includeOrder = GetSourceFileIndex(includeFile, orderedFileList, out includeNode);
+              if (includeOrder == -1) continue;
+              if (includeOrder > sourceOrder)
+              {
+                  orderedFileList.Remove(sourceNode);
+                  orderedFileList.AddAfter(includeNode, sourceNode);
+
+                  sourceOrder = includeOrder;
+              }
+              else if (includeOrder == sourceOrder)
+              {
+                  throw new ArgumentException();
+              }
+          }
+      }
+  }
+
+  orderedFiles = orderedFileList.ToArray();
+
+  ......
+
+  return newCategorizedFiles;
+}
+```
