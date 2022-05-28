@@ -202,9 +202,9 @@ foreach (var line in File.ReadAllLines(codeFile))
 
 大致明白了吧，他使用的是这种以 "../" 相对路径做为头文件的路径声明的方式。这种写法一般只会出现在 `C++` 新手阶段，或者虽然写了很久 `C++`，但并没有太多跨平台经验的人身上，或者一意孤行的偏执者。相信阅读过各大知名开源库的程序员，比如：`linux`，`boost`，`clang`，`llvm` 等，都不会这么写。这种用法，在你的项目里也许够用，能用，但是并不专业。一旦，作为别人项目里的依赖库，很容易导致头文件引用路径问题而凉凉。
 
-相信熟悉 `gcc` 的朋友都知道 `gcc` 的编译选项里 `-I XXXX(路径)` 代表什么意思吧。对，这是包含路径 (`include path`)，`MSVC` 的设置里叫 “附加包含目录”，在 `CMake` 里叫 `include_directories` 。你也可以看到，在 `vczh` 的开源项目里，也没有一个是有用 `CMakeList.txt` 的，可想而知。
+相信熟悉 `gcc` 的朋友都知道 `gcc` 的编译选项里 `-I XXXX(路径)` 是干嘛的吧。对，这就是包含路径 (`include path`)，`MSVC` 的设置里叫 “附加包含目录”，在 `CMake` 里叫 `include_directories` 。你也可以看到，在 `vczh` 的开源项目里，也没有一个是用 `CMakeList.txt` 的，可想而知。
 
-关于为什么要设置包含路径 (`include path`) 的原因，这里就不敖述了。
+关于为什么要设置包含路径 (`include path`) 的原因，这里就不赘述了。
 
 ## 4. 改进
 
@@ -239,7 +239,7 @@ foreach (var line in File.ReadAllLines(codeFile))
 
 3. 合并后的输出文件的编码格式是 `UTF-8 + BOM`，加了 `BOM` 文件标志头以后在 `gcc` 中处理可能会有问题。
 
-为了解决这几个问题，我们又增加了一些设置，配置文件变为：
+为了解决这几个问题，又增加了一些设置，配置文件变为：
 
 ```xml
 <?xml version="1.0" encoding="utf-8" ?>
@@ -360,9 +360,9 @@ foreach (var line in File.ReadAllLines(sourceFile))
 
 具体的解决办法：
 
-我们在 GetIncludedFiles() 函数里扫描的时候，顺便在 `ScannedFiles` 字典里记录了每一个头文件的源码里，所声明包含的所有非系统头文件的文件列表，这个包含的文件列表是经过递归搜索出来的，所以会反应每一个头文件的相互包含（依赖）关系。
+在 GetIncludedFiles() 函数里扫描的时候，顺便在 `ScannedFiles` 字典里记录了每一个头文件的源码里，所声明包含的所有非系统头文件的文件列表，这个包含的文件列表是经过递归搜索出来的，所以会反应每一个头文件的相互包含（依赖）关系。
 
-在 SortCategorizeSourceFiles() 函数里：
+在 `SortCategorizeSourceFiles()` 函数里：
 
 先取得每一个 `category` 里所有的头文件源码里包含其他非系统头文件的文件个数，并对其做升序的排序（从小到大），这样没有依赖任何其他（非系统）头文件的头文件将会排在文件列表 `string[]` 的前面，这样有助于减少之后排序时的 reorder() 次数。
 
@@ -536,4 +536,3 @@ static Encoding GenerateEncoding(string outputEncoding, bool withBOM)
     return encoding;
 }
 ```
-
