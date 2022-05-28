@@ -444,13 +444,13 @@ namespace CodePack
             else
             {
                 if (outputEncoding == "utf-8")
-                    encoding = new System.Text.UTF8Encoding(false);
+                    encoding = new UTF8Encoding(false);
                 else if (outputEncoding == "utf-7")
-                    encoding = new System.Text.UTF7Encoding(false);
+                    encoding = new UTF7Encoding(false);
                 else if (outputEncoding == "utf-32")
-                    encoding = new System.Text.UTF32Encoding(false, false);
+                    encoding = new UTF32Encoding(false, false);
                 else if (outputEncoding == "unicode")
-                    encoding = new System.Text.UnicodeEncoding(false, false);
+                    encoding = new UnicodeEncoding(false, false);
                 else if (outputEncoding == "ascii")
                     encoding = Encoding.ASCII;
                 else

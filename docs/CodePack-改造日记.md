@@ -237,7 +237,7 @@ foreach (var line in File.ReadAllLines(codeFile))
 
 2. 合并文件时会同时生成 `*.h` 和 `*.cpp`，但有时候我们只想生成 `*.h` 文件；
 
-3. 合并后的输出文件的编码格式默认是 `UTF-8 + BOM`，加了 `BOM` 文件标志头以后在 Linux 下的 gcc 处理可能有问题。
+3. 合并后的输出文件的编码格式是 `UTF-8 + BOM`，加了 `BOM` 文件标志头以后在 Linux 下的 gcc 处理可能有问题。
 
 为了解决这几个问题，我们又增加了一些设置，配置文件变为：
 
@@ -267,6 +267,8 @@ foreach (var line in File.ReadAllLines(codeFile))
 ### 4.1 包含路径的处理
 
 包含路径可以包含一个或多个路径，搜索是有顺序的，所以如果有多个路径，要注意路径的先后顺序。
+
+代码如下：
 
 ```C#
 static string[] gIncludePaths = null;
@@ -303,7 +305,7 @@ static string FindIncludeFile(string sourceFile, string includeFile)
 搜索源文件 `sourceFile` 中声明的 `#include "XXXXXX.h"` 的头文件的真实路径 `fullIncludeFile`，如果 `fullIncludeFile` 文件不存在，则显示错误信息。
 
 ```C#
-// 规则表达式：#include "XXXXXX.h"
+// 规则表达式：#include "XXXXXX[.h]"
 static Regex IncludeRegex = new Regex(@"^\s*\#include\s*""(?<path>[^""]+)""\s*$");
 
 ......
@@ -362,9 +364,19 @@ foreach (var line in File.ReadAllLines(sourceFile))
 
 在 SortCategorizeSourceFiles() 函数里：
 
-先取得每一个 `category` 里所有的头文件源码里包含其他非系统头文件的文件个数，并对其做升序的排序（从小到大），这样没有依赖任何其他（非系统）头文件的头文件将会排在文件列表 `string[]` 的前面，这样有助于减少之后排序时的 swap() 次数。
+先取得每一个 `category` 里所有的头文件源码里包含其他非系统头文件的文件个数，并对其做升序的排序（从小到大），这样没有依赖任何其他（非系统）头文件的头文件将会排在文件列表 `string[]` 的前面，这样有助于减少之后排序时的 reorder() 次数。
 
-采用类似冒泡排序的原理，遍历每个 `category` 分类里的所有头文件，
+采用一个很简单的原理，也就是，当在头文件 `A` 中引用了头文件 `B`，那么 `A` 文件的顺序一定要排在 `B` 文件之后。
+
+我们遍历每个 `category` 分类里的所有头文件，并列出该文件引用的所有 `非系统` 头文件，并检查该文件和这些被包含的头文件在当前列表里的顺序，当 "被引用的" 头文件的顺序 `大于` "引用者的" 头文件的顺序时，把 "引用者的" 头文件移到 "被引用的" 头文件的后面，即可。
+
+也就是说当 "引用者的" 头文件排在 "被引用的" 头文件的前面是，我们只需要改变 "引用者的" 头文件的位置即可，其他文件的相对位置不会改变，且 "引用者的" 头文件必须排在当前 "被引用的" 头文件的后面。如果 "引用者的" 头文件的位置还是不对的，后续的遍历中会继续调整它的位置。
+
+当所有文件都被遍历一遍后，文件的先后顺序也就确定了。
+
+(笔者注：一开始我采用的 `swap` 两个文件的位置（顺序）的方法，虽然这种方式在我的应用中是 `OK` 的，但是在复杂的应用中是有问题的。写这篇文章的时候，重新思考和研究了一下，更换为把 "引用者" 移动到 "被引用者" 后面的方法，就没有问题了。)
+
+代码如下：
 
 ```C#
 // 在 GetIncludedFiles() 函数里扫描的时候，所记录下来的每一个头文件，所对应的 #inlcude 非系统头文件的文件列表
@@ -372,16 +384,23 @@ static Dictionary<string, string[]> ScannedFiles = new Dictionary<string, string
 
 ......
 
-static int GetSourceFileIndex(string sourcefile, string[] sourcefiles)
+// 获取文件是顺序索引值，并且返回双向链表中，该文件的 Node 节点。
+static int GetSourceFileIndex(string sourcefile, LinkedList<string> sourcefiles,
+                              out LinkedListNode<string> out_node)
 {
     int index = 0;
     sourcefile = sourcefile.ToLower();
-    foreach (var file in sourcefiles)
+    LinkedListNode<string> node;
+    for (node = sourcefiles.First; node != null; node = node.Next)
     {
-        if (file.ToLower() == sourcefile)
+        if (node.Value.ToLower() == sourcefile)
+        {
+            out_node = node;
             return index;
+        }
         index++;
     }
+    out_node = node;
     return -1;
 }
 
@@ -409,9 +428,13 @@ static Dictionary<string, string[]> SortCategorizeSourceFiles(Dictionary<string,
               LinkedListNode<string> includeNode = null;
               int includeOrder = GetSourceFileIndex(includeFile, orderedFileList, out includeNode);
               if (includeOrder == -1) continue;
+              // 当 "被引用的" 头文件的顺序 > "引用者的" 头文件的顺序时，
+              // 把 "引用者的" 头文件移到 "被引用的" 头文件的后面。
               if (includeOrder > sourceOrder)
               {
+                  // 在原来的地方删除 sourceNode 节点
                   orderedFileList.Remove(sourceNode);
+                  // 在 includeNode 节点的后面插入 sourceNode 节点
                   orderedFileList.AddAfter(includeNode, sourceNode);
 
                   sourceOrder = includeOrder;
@@ -431,3 +454,86 @@ static Dictionary<string, string[]> SortCategorizeSourceFiles(Dictionary<string,
   return newCategorizedFiles;
 }
 ```
+
+### 4.3 输出只生成头文件
+
+这个很简单，在配置文件里的 `<codepair category="jmCmdLine"/>` 里添加 `header-only` 属性，在程序里处理一下就可以了。
+
+```C#
+var categorizedOutput = config.Root
+    .Element("output")
+    .Elements("codepair")
+    .ToDictionary(
+        e => e.Attribute("category").Value,
+        e => Tuple.Create(Path.GetFullPath(outputFolder + "\\" + e.Attribute("filename").Value),
+                          bool.Parse(e.Attribute("header-only").Value),
+                          bool.Parse(e.Attribute("generate").Value))
+        );
+```
+
+### 4.4 输出文件的编码问题
+
+`vczh` 原始的版本中，合并后的输出文件的编码是 `UTF-8 + BOM`。由于我的项目中，为了方便和处理代码中少量的中文字符串。在 `msvc` 里，用的是 `GB2312` 编码，`GBK` 兼容它；在 `gcc` 里，使用的是编译选项 `-finput-charset=gbk`，告诉 `gcc` 源文件是 `GBK` 编码的；在 `clang` 里，因为它不支持 `GBK` 编码，使用的是手动转换中文为 `utf-8` 编码。
+
+`gcc` 是能处理带 `BOM` 和不带 `BOM` 的 `utf-8` 编码的源码的，但是我用了 `-finput-charset=gbk` 参数后，带 `BOM` 的格式就处理不了了。
+
+题外话，在 `msvc`，`gcc`，`clang` 中，想统一兼容中文字符，比较好的方式：
+
+1. 代码中的字符串，错误信息，Log 信息，注释都不要使用中文，中文字符都放到外部的资源文件中，通过读取文件的方式获取。这种方式最好，缺点就是用起来相对比较繁琐一点。
+
+2. 统一使用 `utf-8 without BOM` 编码，不带 `BOM` 的编码用得更广泛一点。`msvc` 也是支持保存为 `utf-8 without BOM` 格式的，但是可能某些早期的 `vc` 版本支持不够好，或者还需要加入 `#pragma execution_character_set("utf-8")`；
+
+我一般采用第一种方式，只有在有少量中文字符，但又不想写到资源文件里的时候才采用我上述的方法。
+
+因此编码格式必须是可以定制的，我们在 `<output>` 添加 `encoding` 和 `with-bom` 属性。
+
+* `encoding` 属性可选的设置有：`Default`, `Ascii`, `Unicode`, `UTF-7`, `UTF-8`, `UTF-32`.
+
+  其中 `Default` 表示是你的操作系统当前的语言所对应的编码格式，中文版 `Windows` 对应的是 `GBK` 或 `GB18030` 编码。有一种用得比较少的编码方式 `BigEndianUnicode`，未写进去，如果需要可以自己加进去。
+
+* `with-bom` 属性表示是否带有 `BOM` 标记，可设置为：`true`, `false` 。
+
+（笔者注：原本我也没考虑不带 `BOM` 标志的格式的，在写文章的时候，多思考了一下，发现 `C#` 也是可以创建不带 `BOM` 的编码格式的，所以把 `with-bom` 属性也加进去了。）
+
+下面是生成编码格式的函数：
+
+
+```cpp
+static Encoding GenerateEncoding(string outputEncoding, bool withBOM)
+{
+    Encoding encoding;
+    outputEncoding = outputEncoding.ToLower();
+    if (withBOM)
+    {
+        if (outputEncoding == "utf-8")
+            encoding = Encoding.UTF8;
+        else if (outputEncoding == "utf-7")
+            encoding = Encoding.UTF7;
+        else if (outputEncoding == "utf-32")
+            encoding = Encoding.UTF32;
+        else if (outputEncoding == "unicode")
+            encoding = Encoding.Unicode;
+        else if (outputEncoding == "ascii")
+            encoding = Encoding.ASCII;
+        else
+            encoding = Encoding.Default;
+    }
+    else
+    {
+        if (outputEncoding == "utf-8")
+            encoding = new System.Text.UTF8Encoding(false);
+        else if (outputEncoding == "utf-7")
+            encoding = new System.Text.UTF7Encoding(false);
+        else if (outputEncoding == "utf-32")
+            encoding = new System.Text.UTF32Encoding(false, false);
+        else if (outputEncoding == "unicode")
+            encoding = new System.Text.UnicodeEncoding(false, false);
+        else if (outputEncoding == "ascii")
+            encoding = Encoding.ASCII;
+        else
+            encoding = Encoding.Default;
+    }
+    return encoding;
+}
+```
+
