@@ -159,12 +159,12 @@ foreach (var line in File.ReadAllLines(codeFile))
 
 `codeFile` 的值为 `.\src\jmCmdLine\jstd\Variant.h` ，那么 `Variant.h` 中 `#include "jstd/char_traits.h"` 的头文件实际路径是：
 
-```cpp
- (".\src\jmCmdLine\jstd\Variant.h" 的目录) + "\" + "jstd/char_traits.h"
+```C#
+ (取 @".\src\jmCmdLine\jstd\Variant.h" 的目录) + @"\" + "jstd/char_traits.h"
 =
-  ".\src\jmCmdLine\jstd"                  + "\" + "jstd/char_traits.h"
+     @".\src\jmCmdLine\jstd"                  + @"\" + "jstd/char_traits.h"
 =
-  ".\src\jmCmdLine\jstd\jstd/char_traits.h"
+     @".\src\jmCmdLine\jstd\jstd/char_traits.h"
 ```
 
 但是最终的结果路径 `".\src\jmCmdLine\jstd\jstd/char_traits.h"` 是不对的，
